@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
 
-export default function useFetch(city, units = "metric", lang = "id") {
+export default function useFetch(city, units = "metric") {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const API_KEY = import.meta.env.VITE_WEATHER_API_KEY;
 
   useEffect(() => {
     if (!city) return;
@@ -13,11 +11,31 @@ export default function useFetch(city, units = "metric", lang = "id") {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=${units}&lang=${lang}`;
-        console.log("Request URL:", url); // debug
+        // 1️⃣ Geocoding city → lat/lon
+        const geoRes = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${city}&count=1`
+        );
+        if (!geoRes.ok) throw new Error("Failed to fetch geocoding");
+        const geoJson = await geoRes.json();
+
+        if (!geoJson.results || geoJson.results.length === 0) {
+          throw new Error(`City "${city}" not found`);
+        }
+
+        const { latitude, longitude } = geoJson.results[0];
+
+        // 2️⃣ Unit mapping
+        const temperature_unit =
+          units === "imperial" ? "fahrenheit" : "celsius";
+
+        // 3️⃣ Fetch weather
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=temperature_2m,precipitation&temperature_unit=${temperature_unit}&timezone=auto`;
+
+        console.log("Request URL:", url);
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Error: ${res.status}`);
         const json = await res.json();
+
         setData(json);
       } catch (err) {
         setError(err);
@@ -27,7 +45,7 @@ export default function useFetch(city, units = "metric", lang = "id") {
     };
 
     fetchData();
-  }, [city, units, lang, API_KEY]);
+  }, [city, units]);
 
   return { data, loading, error };
 }
